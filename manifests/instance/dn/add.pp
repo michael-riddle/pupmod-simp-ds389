@@ -59,17 +59,17 @@
 #   Whether or not to restart the directory server after applying this item
 #
 define ds389::instance::dn::add (
-  Simplib::Systemd::ServiceName         $instance_name,
-  Optional[Pattern['^\S+=.+']]          $dn               = undef,
-  Optional[Array[String[1],1]]          $objectclass      = undef,
-  Optional[Hash[String[1],String[1],1]] $attrs            = undef,
-  Optional[String[3]]                   $content          = undef,
-  Optional[String[2]]                   $root_dn          = undef,
-  Optional[Stdlib::Absolutepath]        $root_pw_file     = undef,
-  Optional[Simplib::Host]               $host             = undef,
-  Optional[Simplib::Port]               $port             = undef,
-  Boolean                               $force_ldapi      = false,
-  Boolean                               $restart_instance = false
+  Pattern['^(([A-Za-z0-9.:_\\\\-])(@[A-Za-z0-9.:_\\\\-])?){1,256}$'] $instance_name,
+  Optional[Pattern['^\S+=.+']]                                       $dn               = undef,
+  Optional[Array[String[1],1]]                                       $objectclass      = undef,
+  Optional[Hash[String[1],String[1],1]]                              $attrs            = undef,
+  Optional[String[3]]                                                $content          = undef,
+  Optional[String[2]]                                                $root_dn          = undef,
+  Optional[Stdlib::Absolutepath]                                     $root_pw_file     = undef,
+  Optional[Stdlib::Host]                                             $host             = undef,
+  Optional[Stdlib::Port]                                             $port             = undef,
+  Boolean                                                            $force_ldapi      = false,
+  Boolean                                                            $restart_instance = false
 ) {
   $_instance_name = split($instance_name, /^(dirsrv@)?slapd-/)[-1]
   $_filesafe_dn = regsubst($dn, '[\\\\/:~\n\s\+\*\(\)@]', '__', 'G')
@@ -124,7 +124,7 @@ define ds389::instance::dn::add (
     $_ldif = @("LDIF")
       dn: ${dn}
       ${dn.split(',')[0].split('=').join(': ')}
-      ${objectclass.sort.map |$oc| { "objectClass: ${oc}"}.join("\n")}
+      ${objectclass.sort.map |$oc| { "objectClass: ${oc}" }.join("\n")}
       ${attrs.map |$k, $v| { "${k}: ${v}" }.join("\n")}
       | LDIF
   }
@@ -136,7 +136,7 @@ define ds389::instance::dn::add (
     group   => 'root',
     mode    => '0400',
     content => Sensitive($_ldif),
-    notify  => Exec[$_ldif_file]
+    notify  => Exec[$_ldif_file],
   }
 
   $_command = "ldapadd ${_ldap_command_base} -f '${_ldif_file}'"
@@ -147,7 +147,7 @@ define ds389::instance::dn::add (
     command => $_command,
     unless  => $_unless,
     path    => ['/bin', '/usr/bin'],
-    require => Ds389::Instance::Service[$_instance_name]
+    require => Ds389::Instance::Service[$_instance_name],
   }
 
   if $restart_instance {
@@ -160,7 +160,7 @@ define ds389::instance::dn::add (
     }
 
     ensure_resource('exec', $_restart_title, {
-        command     => "/sbin/restart-dirsrv ${_instance_name}",
+        command     => "/usr/sbin/dsctl ${_instance_name} restart",
         refreshonly => true
       }
     )

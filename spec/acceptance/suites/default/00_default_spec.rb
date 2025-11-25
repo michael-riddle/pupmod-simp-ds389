@@ -95,13 +95,13 @@ describe 'Set up 389DS' do
 
         # check the details in the facts
         details = results['test_in']
-        expect(details['ldapifilepath']).to eq('/var/run/slapd-test_in.socket')
+        expect(details['ldapifilepath']).to eq('/run/slapd-test_in.socket')
         expect(details['ldapilisten']).to be true
         expect(details['listenhost']).to eq('127.0.0.1')
         expect(details['port']).to eq(389)
         expect(details.key?('require-secure-binds')).to be false
         expect(details['rootdn']).to eq('cn=Directory_Manager')
-        expect(details.key?('securePort')).to be false
+        expect(details['securePort']).to eq(636)
       end
     end
 
@@ -157,22 +157,22 @@ describe 'Set up 389DS' do
 
         # check the details in the facts
         test_in_details = results['test_in']
-        expect(test_in_details['ldapifilepath']).to eq('/var/run/slapd-test_in.socket')
+        expect(test_in_details['ldapifilepath']).to eq('/run/slapd-test_in.socket')
         expect(test_in_details['ldapilisten']).to be true
         expect(test_in_details['listenhost']).to eq('127.0.0.1')
         expect(test_in_details['port']).to eq(389)
         expect(test_in_details.key?('require-secure-binds')).to be false
         expect(test_in_details['rootdn']).to eq('cn=Directory_Manager')
-        expect(test_in_details.key?('securePort')).to be false
+        expect(test_in_details['securePort']).to eq(636)
 
         scrap_details = results['scrap']
-        expect(scrap_details['ldapifilepath']).to eq('/var/run/slapd-scrap.socket')
+        expect(scrap_details['ldapifilepath']).to eq('/run/slapd-scrap.socket')
         expect(scrap_details['ldapilisten']).to be true
         expect(scrap_details['listenhost']).to eq('0.0.0.0')
         expect(scrap_details['port']).to eq(388)
         expect(scrap_details.key?('require-secure-binds')).to be false
         expect(scrap_details['rootdn']).to eq('cn=Scrap_Admin')
-        expect(scrap_details.key?('securePort')).to be false
+        expect(scrap_details['securePort']).to eq(636)
       end
 
       it 'starts after reboot' do

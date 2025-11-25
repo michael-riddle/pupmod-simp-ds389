@@ -2,8 +2,17 @@
 #
 # @author https://github.com/simp/pupmod-simp-ds389/graphs/contributors
 #
+# @param default
+#   The default port for this service (to avoid conflicts with other services)
+#
+# @param instance
+#   The instance name (used to create dependencies)
+#
+# @param enable
+#   Whether to enable or disable the selinux port
+#
 define ds389::instance::selinux::port (
-  Simplib::Port       $default,
+  Stdlib::Port        $default,
   Optional[String[1]] $instance = undef,
   Boolean             $enable   = true
 ) {
@@ -12,16 +21,6 @@ define ds389::instance::selinux::port (
   $_port = Integer($title)
 
   if ($_port != $default) and $facts['os']['selinux']['enforced'] {
-    if simplib::module_exist('simp/selinux') {
-      simplib::assert_optional_dependency($module_name, 'simp/selinux')
-      simplib::assert_optional_dependency($module_name, 'simp/vox_selinux')
-
-      include selinux::install
-    }
-    else {
-      simplib::assert_optional_dependency($module_name, 'puppet/selinux')
-    }
-
     $_ensure = $enable ? {
       true  => 'present',
       false => 'absent'
@@ -32,7 +31,7 @@ define ds389::instance::selinux::port (
       low_port  => $_port,
       high_port => $_port,
       seltype   => 'ldap_port_t',
-      protocol  => 'tcp'
+      protocol  => 'tcp',
     }
 
     if $instance {

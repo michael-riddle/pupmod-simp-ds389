@@ -43,7 +43,7 @@ fi
 
 if ! $compare_only; then
   if [ -z "${token_file}" ]; then
-    token_file="${output_dir}/p12token.txt"
+    token_file="${output_dir}/pwdfile.txt"
   fi
 
   if [ ! -f "${token_file}" ]; then
@@ -64,7 +64,7 @@ if [ ! -d "${output_dir}" ]; then
 fi
 
 # Validate the output dir
-certutil -d "${output_dir}" -L >/dev/null 2>&1
+certutil -d "sql:${output_dir}" -L >/dev/null 2>&1
 if [ $? -ne 0 ]; then
   echo "Error: '${output_dir}' is not a valid database target"
   exit 1
@@ -72,13 +72,13 @@ fi
 
 # Get the existing CA fingerprints
 current_fingerprints=$(
-  certutil -d "${output_dir}" -L | \
+  certutil -d "sql:${output_dir}" -L | \
     grep '[[:space:]]CT,' | \
     sed 's/^\(.\+\)CT,.*/\1/' | \
     sed 's/[[:space:]]\+$//' | \
     while read cert; do
       (
-        certutil -d "${output_dir}" -L -a -n "${cert}" | \
+        certutil -d "sql:${output_dir}" -L -a -n "${cert}" | \
           openssl x509 -noout -fingerprint | \
           cut -f2 -d'='
       )
@@ -89,7 +89,7 @@ umask 0077
 tmpdir=$(mktemp -d -t 389ds-cert-import-XXXXXXXXXX)
 
 (
-  cd "$tmpdir"
+  cd "${tmpdir}"
 
   csplit -z -q "${input_pem}" '/^\-\+BEGIN CERTIFICATE\-\+$/' '{*}'
 
@@ -103,8 +103,8 @@ tmpdir=$(mktemp -d -t 389ds-cert-import-XXXXXXXXXX)
 
       cert_name=$( openssl x509 -in "${x}" -noout -subject_hash )
 
-      certutil -D -d "${output_dir}" -n "${cert_name}" >/dev/null 2>&1 ||:
-      certutil -A -i "${x}" -d "${output_dir}" -n "${cert_name}" -t 'CT,,' -a -f "${token_file}"
+      certutil -D -d "sql:${output_dir}" -n "${cert_name}" >/dev/null 2>&1 ||:
+      certutil -A -i "${x}" -d "sql:${output_dir}" -n "${cert_name}" -t 'CT,,' -a -f "${token_file}"
     fi
   done
 )

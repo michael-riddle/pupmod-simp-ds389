@@ -1,6 +1,6 @@
 {
   "name": "simp-ds389",
-  "version": "0.8.2",
+  "version": "1.0.0",
   "author": "SIMP Team",
   "summary": "Management of 389 Directory Server",
   "license": "Apache-2.0",
@@ -46,7 +46,8 @@
       "operatingsystem": "CentOS",
       "operatingsystemrelease": [
         "8",
-        "9"
+        "9",
+        "10"
       ]
     },
     {
@@ -60,7 +61,8 @@
       "operatingsystem": "RedHat",
       "operatingsystemrelease": [
         "8",
-        "9"
+        "9",
+        "10"
       ]
     },
     {
@@ -74,7 +76,8 @@
       "operatingsystem": "AlmaLinux",
       "operatingsystemrelease": [
         "8",
-        "9"
+        "9",
+        "10"
       ]
     }
   ],

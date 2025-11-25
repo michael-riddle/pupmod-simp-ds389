@@ -2,11 +2,20 @@
 #
 # @author https://github.com/simp/pupmod-simp-ds389/graphs/contributors
 #
+# @param ensure
+#   Whether the service should be running or stopped
+#
+# @param enable
+#   Whether the service should be enabled at boot time
+#
+# @param hasrestart
+#   Whether the service supports restart
+#
 define ds389::instance::service (
-  Enum['stopped','running'] $ensure     = simplib::dlookup('ds389::instance::service', 'ensure', $name, { 'default_value' => 'running'}),
-  Boolean                   $enable     = simplib::dlookup('ds389::instance::service', 'enable', $name, { 'default_value' => true}),
-  Boolean                   $hasrestart = simplib::dlookup('ds389::instance::service', 'hasrestart', $name, { 'default_value' => true})
-){
+  Enum['stopped','running'] $ensure     = simplib::dlookup('ds389::instance::service', 'ensure', $name, { 'default_value' => 'running' }),
+  Boolean                   $enable     = simplib::dlookup('ds389::instance::service', 'enable', $name, { 'default_value' => true }),
+  Boolean                   $hasrestart = simplib::dlookup('ds389::instance::service', 'hasrestart', $name, { 'default_value' => true })
+) {
   assert_private()
 
   $_instance_name = split($title, /^(dirsrv@)?slapd-/)[-1]
@@ -20,14 +29,14 @@ define ds389::instance::service (
     | OVERRIDE
 
   ensure_resource('systemd::dropin_file', "00_dirsrv_${_instance_name}_loglevel.conf", {
-    unit    => "dirsrv@${_instance_name}.service",
-    content => $_loglevel_override
+      unit    => "dirsrv@${_instance_name}.service",
+      content => $_loglevel_override
   })
 
   ensure_resource('service', "dirsrv@${_instance_name}", {
-    ensure     => $ensure,
-    enable     => $enable,
-    hasrestart => $hasrestart,
-    require    => Systemd::Dropin_file["00_dirsrv_${_instance_name}_loglevel.conf"]
+      ensure     => $ensure,
+      enable     => $enable,
+      hasrestart => $hasrestart,
+      require    => Systemd::Dropin_file["00_dirsrv_${_instance_name}_loglevel.conf"]
   })
 }

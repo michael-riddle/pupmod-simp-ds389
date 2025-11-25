@@ -46,5 +46,4 @@ ds389::instance::general_config:
   nsslapd-nagle: 'off'
 
 ds389::instance::tls::dse_config:
-  'cn=config':
-    nsslapd-require-secure-binds: 'on'
+  nsslapd-require-secure-binds: 'on'

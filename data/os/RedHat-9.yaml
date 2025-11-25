@@ -1,3 +1,0 @@
----
-ds389::install::package_list:
-  - 389-ds-base-legacy-tools

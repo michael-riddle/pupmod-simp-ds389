@@ -24,6 +24,7 @@ describe '389DS with PKI' do
         it 'works with no errors' do
           set_hieradata_on(shared_host, hieradata)
           apply_manifest_on(shared_host, manifest, catch_failures: true)
+          apply_manifest_on(shared_host, manifest, catch_failures: true)
         end
 
         it 'is idempotent' do
