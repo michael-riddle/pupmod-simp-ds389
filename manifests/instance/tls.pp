@@ -55,7 +55,7 @@ define ds389::instance::tls (
   Stdlib::Absolutepath                      $root_pw_file,
   Variant[Boolean, Enum['disabled','simp']] $ensure        = false,
   Stdlib::Port                              $port          = 636,
-  Optional[String[1]]                       $source        = '/etc/pki/simp/x509',
+  String[1]                                 $source        = '/etc/pki/simp/x509',
   Stdlib::Absolutepath                      $cert          = "/etc/pki/simp_apps/${module_name}_${title}/x509/public/${facts['networking']['fqdn']}.pub",
   Stdlib::Absolutepath                      $key           = "/etc/pki/simp_apps/${module_name}_${title}/x509/private/${facts['networking']['fqdn']}.pem",
   Stdlib::Absolutepath                      $cafile        = "/etc/pki/simp_apps/${module_name}_${title}/x509/cacerts/cacerts.pem",

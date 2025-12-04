@@ -1,3 +1,7 @@
+* Thu Dec 04 2025 Mike Riddle <mike@sicura.us> - 1.0.0
+- Modernized ds389 to work with later than el8 os flavors
+- Removed el7 support
+
 * Tue Sep 16 2025 Steven Pritchard <steve@sicura.us> - 0.8.2
 - Update to rubocop 1.80.0
 
