@@ -37,6 +37,7 @@ ds389::config::attributes_requiring_restart:
   - nsslapd-schema-ignore-trailing-spaces
   - nsslapd-secureListenhost
   - nsslapd-securePort
+  - nsslapd-security
   - nsslapd-sslClientAuth
   - nsslapd-workingDir
 
@@ -46,5 +47,4 @@ ds389::instance::general_config:
   nsslapd-nagle: 'off'
 
 ds389::instance::tls::dse_config:
-  'cn=config':
-    nsslapd-require-secure-binds: 'on'
+  nsslapd-require-secure-binds: 'on'

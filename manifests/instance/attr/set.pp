@@ -69,22 +69,22 @@
 #   * This may be enabled automatically by `$attrs`
 #
 define ds389::instance::attr::set (
-  Simplib::Systemd::ServiceName  $instance_name,
-  Optional[String[1]]            $key              = undef,
-  Optional[String[1]]            $value            = undef,
-  Ds389::ConfigItems             $attrs            = {},
-  String[2]                      $base_dn          = 'cn=config',
-  Optional[String[2]]            $root_dn          = undef,
-  Optional[Stdlib::Absolutepath] $root_pw_file     = undef,
-  Optional[Simplib::Host]        $host             = undef,
-  Optional[Simplib::Port]        $port             = undef,
-  Boolean                        $force_ldapi      = false,
-  Boolean                        $restart_instance = false
+  Pattern['^(([A-Za-z0-9.:_\\\\-])(@[A-Za-z0-9.:_\\\\-])?){1,256}$']  $instance_name,
+  Optional[String[1]]                                                 $key              = undef,
+  Optional[String[1]]                                                 $value            = undef,
+  Ds389::ConfigItem                                                   $attrs            = {},
+  String[2]                                                           $base_dn          = 'cn=config',
+  Optional[String[2]]                                                 $root_dn          = undef,
+  Optional[Stdlib::Absolutepath]                                      $root_pw_file     = undef,
+  Optional[Stdlib::Host]                                              $host             = undef,
+  Optional[Stdlib::Port]                                              $port             = undef,
+  Boolean                                                             $force_ldapi      = false,
+  Boolean                                                             $restart_instance = false
 ) {
   $_instance_name = split($instance_name, /^(dirsrv@)?slapd-/)[-1]
 
   if !$key and !$value and empty($attrs) {
-    fail('You must specify either $key and $value or $attrs')
+    fail('You must specify either $key and $value or $attrs' )
   }
   if ($key and !$value) or ($value and !$key) {
     fail('You must specify both $key and $value if one is specified')
@@ -100,7 +100,7 @@ define ds389::instance::attr::set (
     fail("You must specify an \$root_dn for '${title}'")
   }
 
-  $_root_pw_file = pick($root_pw_file, "/usr/share/puppet_ds389_config/${_instance_name}_ds_pw.txt")
+  $_root_pw_file = pick($root_pw_file, "/etc/dirsrv/slapd-${_instance_name}/pwdfile.txt")
 
   if $force_ldapi or $_known_instances.dig($_instance_name, 'ldapilisten') {
     $_ldapi_path = $_known_instances.dig($_instance_name, 'ldapifilepath')
@@ -134,45 +134,38 @@ define ds389::instance::attr::set (
   }
   else {
     $_attrs = {
-      $base_dn => {
-        $key => $value
-      }
+      $key => $value,
     }
   }
 
-  $_attrs.each |String $_base_dn, Ds389::ConfigItem $_config_item| {
-    $_config_item.each |String $_key, NotUndef $_value| {
+  $_attrs.each |String $_key, NotUndef $_value| {
+    $_command = "/usr/sbin/dsconf -y ${_root_pw_file} ${_instance_name} config replace ${_key}=${_value}"
+    $_unless = "/usr/sbin/dsconf ${_instance_name} config get '${_key}' | grep -x '${_key}: ${_value}'"
 
-      $_command = "echo -e \"dn: ${_base_dn}\\nchangetype: modify\\nreplace: ${_key}\\n${_key}: ${_value}\" | ldapmodify ${_ldap_command_base}"
-      $_unless = "ldapsearch ${_ldap_command_base} -LLL -s base -S '' -a always -o ldif-wrap=no -b '${_base_dn}' '${_key}' | grep -x '${_key}: ${_value}'"
+    # This should be a provider
+    exec { "Set ${_key} on ${_instance_name}":
+      command => Sensitive($_command),
+      unless  => Sensitive($_unless),
+      require => Ds389::Instance::Service[$_instance_name],
+    }
 
-      # This should be a provider
-      exec { "Set ${_base_dn},${_key} on ${_instance_name}":
-        command => Sensitive($_command),
-        unless  => Sensitive($_unless),
-        path    => ['/bin', '/usr/bin'],
-        require => Ds389::Instance::Service[$_instance_name]
+    if $restart_instance or
+    $_key in lookup('ds389::config::attributes_requiring_restart', { 'default_value' => [] }) {
+      # Workaround for LDAPI bootstrapping
+      if $force_ldapi {
+        $_restart_title = "Restart LDAPI ${_instance_name}"
+      }
+      else {
+        $_restart_title = "Restart ${_instance_name}"
       }
 
-      if $restart_instance or
-        $_key in lookup('ds389::config::attributes_requiring_restart', { 'default_value' => [] })
-      {
-        # Workaround for LDAPI bootstrapping
-        if $force_ldapi {
-          $_restart_title = "Restart LDAPI ${_instance_name}"
+      ensure_resource('exec', $_restart_title, {
+          command     => "/usr/sbin/dsctl ${_instance_name} restart",
+          refreshonly => true
         }
-        else {
-          $_restart_title = "Restart ${_instance_name}"
-        }
+      )
 
-        ensure_resource('exec', $_restart_title, {
-            command     => "/sbin/restart-dirsrv ${_instance_name}",
-            refreshonly => true
-          }
-        )
-
-        Exec["Set ${_base_dn},${_key} on ${_instance_name}"] ~> Exec[$_restart_title]
-      }
+      Exec["Set ${_key} on ${_instance_name}"] ~> Exec[$_restart_title]
     }
   }
 }

@@ -31,7 +31,7 @@ describe '389DS with PKI' do
         end
 
         it 'can not login to 389DS unencrypted' do
-          expect { on(shared_host, %(ldapsearch -x -w "#{rootpasswd}" -D "#{root_dn}" -h #{fqdn} -b "cn=tasks,cn=config")) }.to raise_error(%r{.+})
+          expect { on(shared_host, %(ldapsearch -x -w "#{rootpasswd}" -D "#{root_dn}" -H ldap://#{fqdn} -b "cn=tasks,cn=config")) }.to raise_error(%r{.+})
         end
 
         it 'sets the environment variables for ldapsearch' do
@@ -93,6 +93,31 @@ describe '389DS with PKI' do
                 'enable_tls'       => true,
                 'tls_params'       => {
                   'source' => certdir
+                }
+              }
+            }
+          }
+        end
+
+        it_behaves_like 'a TLS-enabled 389ds instance', host
+      end
+
+      context 'with user-provided token' do
+        let(:ds_root_name) { 'test_tls' }
+        let(:port_starttls) { 389 }
+        let(:port_tls) { 636 }
+        let(:hieradata) do
+          {
+            'ds389::instances' => {
+              ds_root_name => {
+                'base_dn'          => base_dn,
+                'root_dn'          => root_dn,
+                'root_dn_password' => rootpasswd,
+                'listen_address'   => '0.0.0.0',
+                'enable_tls'       => true,
+                'tls_params'       => {
+                  'source' => certdir,
+                  'token'  => '6MLsVlgVboxHd032kID6.z.yqjNnaa2UYPFYEqsXj7Etb8i3tJcpLgF74JsYRUC5Q'
                 }
               }
             }

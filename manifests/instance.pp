@@ -1,5 +1,8 @@
 # @summary Set up a local 389DS server
 #
+# @param ensure
+#   Whether the instance should be present or absent
+#
 # @param base_dn
 #   The 'base' DN component of the directory server
 #
@@ -15,6 +18,9 @@
 #   * NOTE: To work around certain application bugs, items with spaces may not
 #     be used in this field.
 #
+# @param machine_name
+#   The full machine name (FQDN) of the server hosting this instance
+#
 # @param listen_address
 #   The IP address upon which to listen
 #
@@ -24,18 +30,24 @@
 # @param secure_port
 #   The port upon which to accept LDAPS connections
 #
-# @param service_user
-#   The user that ``389ds`` should run as
-#
 # @param service_group
 #   The group that ``389ds`` should run as
 #
 # @param bootstrap_ldif_content
 #   The content that should be used to initialize the directory
 #
+# @param ds_setup_ini_content
+#   The content that should be used as the dscreate setup INI file.
+#   If not provided, a template will be used.
+#
 # @param general_config
 #   General configuration items for the instance
 #
+#   * These items fall under the `cn=config` root and will take precedence over
+#     any conflicting, more specific, Hashes
+#
+# @param password_policy
+#   Password policy configuration items for the instance
 #   * These items fall under the `cn=config` root and will take precedence over
 #     any conflicting, more specific, Hashes
 #
@@ -48,6 +60,9 @@
 #                 configuration of the directory.
 #   'false'    => Do nothing with the TLS settings.
 #   'disabled' => Disable TLS on the instance.
+#
+# @param self_sign_cert
+#   Whether to self-sign the server certificate if TLS is enabled
 #
 # @param tls_params
 #   Parameters to pass to the TLS module:
@@ -71,23 +86,25 @@ define ds389::instance (
   Enum['present','absent']       $ensure                 = 'present',
   Optional[String[2]]            $base_dn                = undef,
   Optional[Pattern['^[\S]+$']]   $root_dn                = undef,
-  Simplib::IP                    $listen_address         = '127.0.0.1',
-  Simplib::Port                  $port                   = 389,
-  Simplib::Port                  $secure_port            = 636,
+  Stdlib::IP::Address            $listen_address         = '127.0.0.1',
+  Stdlib::Port                   $port                   = 389,
+  Stdlib::Port                   $secure_port            = 636,
   Optional[Pattern['^[\S]+$']]   $root_dn_password       = undef,
   String[1]                      $machine_name           = $facts['networking']['fqdn'],
-  String[1]                      $service_user           = 'dirsrv',
   String[1]                      $service_group          = 'dirsrv',
   Optional[String[1]]            $bootstrap_ldif_content = undef,
   Optional[String[1]]            $ds_setup_ini_content   = undef,
-  Ds389::ConfigItem              $general_config         = simplib::dlookup('ds389::instance', 'general_config', {'default_value' => {} }),
-  Ds389::ConfigItem              $password_policy        = simplib::dlookup('ds389::instance', 'password_policy', {'default_value' => {} }),
-  Variant[Boolean, Enum['simp']] $enable_tls             = simplib::lookup('simp_options::pki', { 'default_value' => false }),
+  Ds389::ConfigItem              $general_config         = {
+    'nsslapd-dynamic-plugins' => 'on',
+    'nsslapd-allow-unauthenticated-binds' => 'off',
+    'nsslapd-nagle' => 'off',
+  },
+  Ds389::ConfigItem              $password_policy        = simplib::dlookup('ds389::instance', 'password_policy', { 'default_value' => {} }),
+  Variant[Boolean, Enum['simp']] $enable_tls             = false,
+  Enum['True','False']           $self_sign_cert         = 'False',
   Hash                           $tls_params             = simplib::dlookup('ds389::instance', 'tls_params', { 'default_value' => {} }),
 ) {
-  simplib::assert_metadata($module_name)
-
-  assert_type(Simplib::Systemd::ServiceName, $title) |$expected, $actual| {
+  assert_type(Pattern['^(([A-Za-z0-9.:_\\\\-])(@[A-Za-z0-9.:_\\\\-])?){1,256}$'], $title) |$expected, $actual| {
     fail("The \$title for ds389::instance must be a valid systemd service name matching ${expected}. Got ${actual}")
   }
   if stdlib::start_with($title, 'dirsrv@') or stdlib::start_with($title, 'slapd-') {
@@ -99,8 +116,11 @@ define ds389::instance (
   if stdlib::end_with($title, '.removed') {
     fail('You cannot end a 389DS instance with ".removed"')
   }
+  # We need to include this here to make sure that all of the top-level
+  # parameters propagate correctly downwards
+  include ds389
 
-  $_ds_remove_command = "/sbin/remove-ds.pl -f -i slapd-${title}"
+  $_ds_remove_command = "${ds389::install::remove_command} ${title} remove --do-it"
 
   if $ensure == 'present' {
     unless $base_dn { fail('You must specify a base_dn') }
@@ -118,10 +138,6 @@ define ds389::instance (
     if defined_with_params(Ds389::Instance, { 'ensure' => $ensure, 'port' => $port }) {
       fail("The port '${port}' is already selected for use by another defined catalog resource")
     }
-
-    # We need to include this here to make sure that all of the top-level
-    # parameters propagate correctly downwards
-    include ds389
 
     $_safe_path = simplib::safe_filename($title)
 
@@ -143,7 +159,7 @@ define ds389::instance (
           owner   => 'root',
           group   => $service_group,
           mode    => '0640',
-          content => Sensitive($bootstrap_ldif_content)
+          content => Sensitive($bootstrap_ldif_content),
         }
 
         unless $title in pick($facts['ds389__instances'], {}).keys {
@@ -156,22 +172,21 @@ define ds389::instance (
 
       $_ds_setup_inf = epp("${module_name}/instance/setup.ini.epp",
         {
-          server_identifier   => $title,
+          instance_name       => $title,
           base_dn             => $base_dn,
           root_dn             => $root_dn,
           root_dn_password    => $_root_dn_password,
-          service_user        => $service_user,
-          service_group       => $service_group,
           machine_name        => $machine_name,
           port                => $port,
-          bootstrap_ldif_file => $_bootstrap_ldif_file
+          self_sign_cert      => $self_sign_cert,
+          secure_port         => $secure_port,
         }
       )
     }
 
     ds389::instance::selinux::port { String($port):
       instance => $title,
-      default  => 389
+      default  => 389,
     }
 
     $_ds_config_file = "${ds389::config_dir}/${$_safe_path}_ds_setup.inf"
@@ -182,7 +197,7 @@ define ds389::instance (
       mode                    => '0600',
       selinux_ignore_defaults => true,
       content                 => Sensitive($_ds_setup_inf),
-      require                 => Class['ds389::install']
+      require                 => Class['ds389::install'],
     }
 
     unless $title in pick($facts['ds389__instances'], {}).keys {
@@ -190,31 +205,36 @@ define ds389::instance (
     }
 
     $_ds_instance_setup = "/etc/dirsrv/slapd-${_safe_path}/.puppet_bootstrapped"
-    #$_ds_instance_setup = "/etc/dirsrv/slapd-${_safe_path}/dse.ldif"
 
     if $title in pick($facts['ds389__instances'], {}).keys {
       exec { "Cleanup Bad Bootstrap for ${title} DS":
-        command => "${ds389::install::remove_command} -i slapd-${title}",
+        command => $_ds_remove_command,
         creates => $_ds_instance_setup,
-        notify  => Exec["Setup ${title} DS"]
+        notify  => Exec["Setup ${title} DS"],
       }
     }
 
+    $_base_setup_command = "${ds389::install::setup_command} from-file ${_ds_config_file} > /dev/null 2>&1"
+    $_ldif_import_command = $_bootstrap_ldif_file ? {
+      undef   => '',
+      default => " && ${ds389::install::dsconf_command} ${title} backend import userroot ${_bootstrap_ldif_file} > /dev/null 2>&1",
+    }
+
     exec { "Setup ${title} DS":
-      command => "${ds389::install::setup_command} --silent -f ${_ds_config_file} && touch '${_ds_instance_setup}'",
+      command => "${_base_setup_command}${_ldif_import_command} && touch '${_ds_instance_setup}'",
       creates => $_ds_instance_setup,
-      notify  => Ds389::Instance::Service[$title]
+      require => File[$_ds_config_file],
+      notify  => Ds389::Instance::Service[$title],
     }
 
     $_ds_pw_file = "${ds389::config_dir}/${_safe_path}_ds_pw.txt"
 
     file { $_ds_pw_file:
-      ensure  => 'present',
       owner   => 'root',
       group   => 'root',
       mode    => '0400',
       content => Sensitive($_root_dn_password),
-      require => Exec["Setup ${title} DS"]
+      require => Exec["Setup ${title} DS"],
     }
 
     ensure_resource('ds389::instance::service', $title)
@@ -223,32 +243,29 @@ define ds389::instance (
     ds389::instance::attr::set { "Configure LDAPI for ${title}":
       instance_name    => $title,
       attrs            => {
-        'cn=config'    => {
-          'nsslapd-ldapilisten'   => 'on',
-          'nsslapd-ldapiautobind' => 'on',
-          'nsslapd-localssf'      => 99999
-        }
+        'nsslapd-ldapilisten'   => 'on',
+        'nsslapd-ldapiautobind' => 'on',
+        'nsslapd-localssf'      => 99999,
       },
       root_dn          => $root_dn,
       root_pw_file     => $_ds_pw_file,
       host             => $listen_address,
       port             => $port,
-      restart_instance => true
+      restart_instance => true,
     }
 
     $_dse_config = {
-      'cn=config' => {
-        'nsslapd-listenhost'       => $listen_address,
-        'nsslapd-securelistenhost' => $listen_address
-      }.merge($general_config).merge($password_policy)
-    }
+      'nsslapd-listenhost'       => $listen_address,
+      'nsslapd-securelistenhost' => $listen_address,
+    }.stdlib::merge($general_config).stdlib::merge($password_policy)
+
     ds389::instance::attr::set { "Core configuration for ${title}":
       instance_name => $title,
       attrs         => $_dse_config,
       root_dn       => $root_dn,
       root_pw_file  => $_ds_pw_file,
       force_ldapi   => true,
-      require       => Ds389::Instance::Attr::Set["Configure LDAPI for ${title}"]
+      require       => Ds389::Instance::Attr::Set["Configure LDAPI for ${title}"],
     }
 
     if $enable_tls {
@@ -259,14 +276,14 @@ define ds389::instance (
         port          => $secure_port,
         service_group => $service_group,
         *             => $tls_params,
-        require       => Ds389::Instance::Attr::Set["Configure LDAPI for ${title}"]
+        require       => Ds389::Instance::Attr::Set["Configure LDAPI for ${title}"],
       }
     }
   }
   else {
     exec { "Remove 389DS instance ${title}":
       command => $_ds_remove_command,
-      onlyif  => "/bin/test -d /etc/dirsrv/slapd-${title}"
+      onlyif  => "/bin/test -d /etc/dirsrv/slapd-${title}",
     }
 
     pick($facts['ds389__instances'], {}).each |$daemon, $data| {
@@ -281,7 +298,7 @@ define ds389::instance (
           )
         }
 
-        if ( $data['securePort'] == $secure_port) {
+        if ( $data['securePort'] == $secure_port ) {
           ensure_resource('ds389::instance::selinux::port', String($secure_port), {
               enable  => false,
               default => 636

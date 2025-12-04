@@ -1,36 +1,38 @@
 <%- |
 # @summary INI Template for a directory server instance
 #
-# All options can be found at
-#
-# https://access.redhat.com/documentation/en-us/red_at_directory_server/10/html/installation_guide/preparing_for_a_directory_server_installation-installation_overview
+# All options can be viewed by running: 'dscreate create-template'
 
-  String[1]                  $server_identifier,
+  String[1]                  $instance_name,
   String[2]                  $base_dn,
   String[2]                  $root_dn,
   String[1]                  $root_dn_password,
-  String[1]                  $service_user,
-  String[1]                  $service_group,
   String[1]                  $machine_name,
+  String[1]                  $self_sign_cert,
   Simplib::Port              $port,
-  Optional[Stdlib::Unixpath] $bootstrap_ldif_file = undef,
+  Simplib::Port              $secure_port,
 | -%>
 # This file managed by Puppet
-[General]
-SuiteSpotUserID=<%= $service_user %>
-SuiteSpotGroup=<%= $service_group %>
-FullMachineName=<%= $machine_name %>
-ConfigDirectoryLdapURL=ldap://<%= $machine_name %>:<%= $port %>/o=NetscapeRoot
+[general]
+defaults = 999999999
+full_machine_name = <%= $machine_name %>
+start = True
+strict_host_checking = False
 
 [slapd]
-ServerIdentifier=<%= $server_identifier%>
-ServerPort=<%= $port %>
-Suffix=<%= $base_dn %>
-RootDN=<%= $root_dn %>
-RootDNPwd=<%= $root_dn_password %>
-SlapdConfigForMC=yes
-AddOrgEntries=yes
-AddSampleEntries=no
-<% if $bootstrap_ldif_file { -%>
-InstallLdifFile=<%= $bootstrap_ldif_file %>
+instance_name = <%= $instance_name %>
+root_dn = <%= $root_dn %>
+ldapi = /run/slapd-{instance_name}.socket
+port = <%= $port %>
+root_password = <%= $root_dn_password %>
+secure_port = <%= $secure_port %>
+self_sign_cert = <%= $self_sign_cert %>
+<% if $self_sign_cert == 'True' { -%>
+self_sign_cert_valid_months = 24
 <% } -%>
+
+[backend-userroot]
+suffix = <%= $base_dn %>
+require_index = True
+create_suffix_entry = True
+sample_entries = no

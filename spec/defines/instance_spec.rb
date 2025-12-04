@@ -65,48 +65,58 @@ describe 'ds389::instance', type: :define do
             inifile = IniFile.new
             inifile = inifile.parse(content).to_h
 
-            expect(inifile.keys.sort).to eq(['General', 'slapd'].sort)
-            expect(inifile['General'].keys.sort).to eq(
+            expect(inifile.keys.sort).to eq(['general', 'slapd', 'backend-userroot'].sort)
+            expect(inifile['general'].keys.sort).to eq(
               [
-                'SuiteSpotUserID',
-                'SuiteSpotGroup',
-                'FullMachineName',
-                'ConfigDirectoryLdapURL',
+                'defaults',
+                'full_machine_name',
+                'start',
+                'strict_host_checking',
               ].sort,
             )
-            expect(inifile['General']['SuiteSpotUserID']).to eq('dirsrv')
-            expect(inifile['General']['SuiteSpotGroup']).to eq('dirsrv')
-            expect(inifile['General']['FullMachineName']).to eq(facts[:fqdn])
-            expect(inifile['General']['ConfigDirectoryLdapURL']).to eq("ldap://#{facts[:fqdn]}:389/o=NetscapeRoot")
+            expect(inifile['general']['defaults']).to eq(999_999_999)
+            expect(inifile['general']['full_machine_name']).to eq(facts[:fqdn])
+            expect(inifile['general']['start']).to eq(true)
+            expect(inifile['general']['strict_host_checking']).to eq(false)
 
             expect(inifile['slapd'].keys.sort).to eq(
               [
-                'ServerPort',
-                'ServerIdentifier',
-                'Suffix',
-                'RootDN',
-                'RootDNPwd',
-                'SlapdConfigForMC',
-                'AddOrgEntries',
-                'AddSampleEntries',
+                'instance_name',
+                'root_dn',
+                'ldapi',
+                'port',
+                'root_password',
+                'secure_port',
+                'self_sign_cert',
               ].sort,
             )
-            expect(inifile['slapd']['ServerPort']).to eq(389)
-            expect(inifile['slapd']['ServerIdentifier']).to eq(title)
-            expect(inifile['slapd']['Suffix']).to match(%r{^ou=root,(dn=.+,?){2}$})
-            expect(inifile['slapd']['RootDN']).to eq('cn=Directory_Manager')
-            expect(inifile['slapd']['RootDNPwd']).to match(%r{^.+{8,}})
-            expect(inifile['slapd']['SlapdConfigForMC']).to eq('yes')
-            expect(inifile['slapd']['AddOrgEntries']).to eq('yes')
-            expect(inifile['slapd']['AddSampleEntries']).to eq('no')
+            expect(inifile['slapd']['instance_name']).to eq(title)
+            expect(inifile['slapd']['root_dn']).to eq('cn=Directory_Manager')
+            expect(inifile['slapd']['port']).to match(389)
+            expect(inifile['slapd']['root_password'].length).to eq(64)
+            expect(inifile['slapd']['secure_port']).to match(636)
+            expect(inifile['slapd']['self_sign_cert']).to eq(false)
+
+            expect(inifile['backend-userroot'].keys.sort).to eq(
+              [
+                'suffix',
+                'require_index',
+                'create_suffix_entry',
+                'sample_entries',
+              ].sort,
+            )
+            expect(inifile['backend-userroot']['suffix']).to eq('ou=root,dn=my,dn=domain')
+            expect(inifile['backend-userroot']['require_index']).to eq(true)
+            expect(inifile['backend-userroot']['create_suffix_entry']).to eq(true)
+            expect(inifile['backend-userroot']['sample_entries']).to eq('no')
           }
 
           it {
             is_expected.to create_exec("Setup #{title} DS")
-              .with_command("/sbin/setup-ds.pl --silent -f /usr/share/puppet_ds389_config/#{title}_ds_setup.inf && touch '/etc/dirsrv/slapd-#{title}/.puppet_bootstrapped'")
+              .with_command("/usr/sbin/dscreate from-file /usr/share/puppet_ds389_config/#{title}_ds_setup.inf > /dev/null 2>&1 && touch '/etc/dirsrv/slapd-#{title}/.puppet_bootstrapped'")
               .with_creates("/etc/dirsrv/slapd-#{title}/.puppet_bootstrapped")
               .that_requires("File[/usr/share/puppet_ds389_config/#{title}_ds_setup.inf]")
-              .that_notifies("Service[dirsrv@#{title}]")
+              .that_notifies("Ds389::Instance::Service[#{title}]")
           }
 
           it {
@@ -119,7 +129,6 @@ describe 'ds389::instance', type: :define do
 
           it {
             is_expected.to create_file("/usr/share/puppet_ds389_config/#{title}_ds_pw.txt")
-              .with_ensure('present')
               .with_owner('root')
               .with_group('root')
               .with_mode('0400')
@@ -146,11 +155,9 @@ describe 'ds389::instance', type: :define do
               .with_restart_instance(true)
               .with_attrs(
                 {
-                  'cn=config' => {
-                    'nsslapd-ldapilisten' => 'on',
-                    'nsslapd-ldapiautobind' => 'on',
-                    'nsslapd-localssf' => 99_999
-                  }
+                  'nsslapd-ldapilisten' => 'on',
+                  'nsslapd-ldapiautobind' => 'on',
+                  'nsslapd-localssf' => 99_999
                 },
               )
           }
@@ -162,10 +169,8 @@ describe 'ds389::instance', type: :define do
               .with_force_ldapi(true)
               .that_requires("Ds389::Instance::Attr::Set[Configure LDAPI for #{title}]")
 
-            config_collection = catalogue.resource("Ds389::Instance::Attr::Set[Core configuration for #{title}]")[:attrs]
-            expect(config_collection.keys).to eq(['cn=config'])
+            attrs = catalogue.resource("Ds389::Instance::Attr::Set[Core configuration for #{title}]")[:attrs]
 
-            attrs = config_collection['cn=config']
             expect(attrs['nsslapd-listenhost']).to eq('127.0.0.1')
             expect(attrs['nsslapd-securelistenhost']).to eq('127.0.0.1')
             expect(attrs['nsslapd-dynamic-plugins']).to eq('on')
@@ -196,12 +201,9 @@ describe 'ds389::instance', type: :define do
                 .with_cafile('/etc/pki/simp_apps/ds389_test/x509/cacerts/cacerts.pem')
                 .with_dse_config(
                   {
-                    'cn=config' => {
-                      'nsslapd-require-secure-binds' => 'on'
-                    }
+                    'nsslapd-require-secure-binds' => 'on'
                   },
                 )
-                .with_token(%r{^\S{32}$})
                 .with_service_group('dirsrv')
             }
           end
@@ -223,16 +225,12 @@ describe 'ds389::instance', type: :define do
                 .that_notifies("Exec[Setup #{title} DS]")
             }
 
-            it do
-              content = catalogue.resource("File[/usr/share/puppet_ds389_config/#{title}_ds_setup.inf]")[:content]
-
-              require 'inifile'
-
-              inifile = IniFile.new
-              inifile = inifile.parse(content).to_h
-
-              expect(inifile['slapd']['InstallLdifFile']).to eq("/usr/share/puppet_ds389_config/#{title}_ds_bootstrap.ldif")
-            end
+            # rubocop:disable Layout/LineLength
+            it {
+              is_expected.to create_exec("Setup #{title} DS")
+                .with_command("/usr/sbin/dscreate from-file /usr/share/puppet_ds389_config/#{title}_ds_setup.inf > /dev/null 2>&1 && /usr/sbin/dsconf #{title} backend import userroot /usr/share/puppet_ds389_config/#{title}_ds_bootstrap.ldif > /dev/null 2>&1 && touch '/etc/dirsrv/slapd-#{title}/.puppet_bootstrapped'")
+            }
+            # rubocop:enable Layout/LineLength
           end
 
           context 'when removing an instance' do
@@ -263,7 +261,7 @@ describe 'ds389::instance', type: :define do
               it { is_expected.to compile.with_all_deps }
               it {
                 is_expected.to create_exec("Remove 389DS instance #{title}")
-                  .with_command("/sbin/remove-ds.pl -f -i slapd-#{title}")
+                  .with_command("/usr/sbin/dsctl #{title} remove --do-it")
                   .with_onlyif("/bin/test -d /etc/dirsrv/slapd-#{title}")
               }
 
