@@ -27,22 +27,18 @@ describe 'ds389::instance::attr::set', type: :define do
         it { is_expected.to compile.with_all_deps }
 
         it {
-          is_expected.to create_exec("Set cn=config,#{params[:key]} on #{params[:instance_name]}")
+          is_expected.to create_exec("Set #{params[:key]} on #{params[:instance_name]}")
             .with_command(
               sensitive(
-                # rubocop:disable Layout/LineLength
-                %(echo -e "dn: cn=config\\nchangetype: modify\\nreplace: #{params[:key]}\\n#{params[:key]}: #{params[:value]}" | ldapmodify -x -D '#{params[:root_dn]}' -y '#{params[:root_pw_file]}' -H ldap://127.0.0.1:389),
-                # rubocop:enable Layout/LineLength
+                "/usr/sbin/dsconf -y #{params[:root_pw_file]} #{params[:instance_name]} config replace #{params[:key]}=#{params[:value]}",
               ),
             )
             .with_unless(
               sensitive(
-                # rubocop:disable Layout/LineLength
-                %(ldapsearch -x -D '#{params[:root_dn]}' -y '#{params[:root_pw_file]}' -H ldap://127.0.0.1:389 -LLL -s base -S '' -a always -o ldif-wrap=no -b 'cn=config' '#{params[:key]}' | grep -x '#{params[:key]}: #{params[:value]}'),
-                # rubocop:enable Layout/LineLength
+                "/usr/sbin/dsconf #{params[:instance_name]} config get '#{params[:key]}' | grep -x '#{params[:key]}: #{params[:value]}'",
               ),
             )
-            .with_path(['/bin', '/usr/bin'])
+            .that_requires("Ds389::Instance::Service[#{params[:instance_name]}]")
         }
 
         it { is_expected.not_to create_service(params[:instance_name]) }
@@ -65,9 +61,8 @@ describe 'ds389::instance::attr::set', type: :define do
 
           it {
             is_expected.to create_exec("Restart #{params[:instance_name]}")
-              .with_command("/sbin/restart-dirsrv #{params[:instance_name]}")
+              .with_command("/usr/sbin/dsctl #{params[:instance_name]} restart")
               .with_refreshonly(true)
-              .that_requires("Exec[Set cn=config,#{params[:key]} on #{params[:instance_name]}]")
           }
         end
       end

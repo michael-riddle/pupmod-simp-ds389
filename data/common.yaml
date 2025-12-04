@@ -37,6 +37,7 @@ ds389::config::attributes_requiring_restart:
   - nsslapd-schema-ignore-trailing-spaces
   - nsslapd-secureListenhost
   - nsslapd-securePort
+  - nsslapd-security
   - nsslapd-sslClientAuth
   - nsslapd-workingDir
 

@@ -70,7 +70,7 @@ describe 'Set up 389DS' do
       end
 
       it 'can login to 389DS' do
-        on(host, %(ldapsearch -x -w "#{rootpasswd}" -D "#{root_dn}" -h localhost -b "cn=tasks,cn=config"))
+        on(host, %(ldapsearch -x -w "#{rootpasswd}" -D "#{root_dn}" -H ldap://localhost -b "cn=tasks,cn=config"))
       end
 
       it 'can login to 389DS via LDAPI' do
@@ -84,7 +84,7 @@ describe 'Set up 389DS' do
       end
 
       it 'fails when logging in with forced encryption' do
-        expect { on(host, %(ldapsearch -ZZ -x -w "#{rootpasswd}" -D "#{root_dn}" -h `hostname -f` -b "cn=tasks,cn=config")) }.to raise_error(Beaker::Host::CommandFailure)
+        expect { on(host, %(ldapsearch -ZZ -x -w "#{rootpasswd}" -D "#{root_dn}" -H ldap://`hostname -f` -b "cn=tasks,cn=config")) }.to raise_error(Beaker::Host::CommandFailure)
       end
 
       it 'reports 389ds instance facts for single instance' do

@@ -30,9 +30,6 @@
 # @param secure_port
 #   The port upon which to accept LDAPS connections
 #
-# @param service_user
-#   The user that ``389ds`` should run as
-#
 # @param service_group
 #   The group that ``389ds`` should run as
 #
@@ -64,6 +61,9 @@
 #   'false'    => Do nothing with the TLS settings.
 #   'disabled' => Disable TLS on the instance.
 #
+# @param self_sign_cert
+#   Whether to self-sign the server certificate if TLS is enabled
+#
 # @param tls_params
 #   Parameters to pass to the TLS module:
 #
@@ -91,7 +91,6 @@ define ds389::instance (
   Stdlib::Port                   $secure_port            = 636,
   Optional[Pattern['^[\S]+$']]   $root_dn_password       = undef,
   String[1]                      $machine_name           = $facts['networking']['fqdn'],
-  String[1]                      $service_user           = 'dirsrv',
   String[1]                      $service_group          = 'dirsrv',
   Optional[String[1]]            $bootstrap_ldif_content = undef,
   Optional[String[1]]            $ds_setup_ini_content   = undef,
@@ -102,6 +101,7 @@ define ds389::instance (
   },
   Ds389::ConfigItem              $password_policy        = simplib::dlookup('ds389::instance', 'password_policy', { 'default_value' => {} }),
   Variant[Boolean, Enum['simp']] $enable_tls             = false,
+  Enum['True','False']           $self_sign_cert         = 'False',
   Hash                           $tls_params             = simplib::dlookup('ds389::instance', 'tls_params', { 'default_value' => {} }),
 ) {
   assert_type(Pattern['^(([A-Za-z0-9.:_\\\\-])(@[A-Za-z0-9.:_\\\\-])?){1,256}$'], $title) |$expected, $actual| {
@@ -173,15 +173,12 @@ define ds389::instance (
       $_ds_setup_inf = epp("${module_name}/instance/setup.ini.epp",
         {
           instance_name       => $title,
-          server_identifier   => $title,
           base_dn             => $base_dn,
           root_dn             => $root_dn,
           root_dn_password    => $_root_dn_password,
-          service_user        => $service_user,
-          service_group       => $service_group,
           machine_name        => $machine_name,
           port                => $port,
-          enable_tls          => $enable_tls,
+          self_sign_cert      => $self_sign_cert,
           secure_port         => $secure_port,
         }
       )
@@ -208,7 +205,6 @@ define ds389::instance (
     }
 
     $_ds_instance_setup = "/etc/dirsrv/slapd-${_safe_path}/.puppet_bootstrapped"
-    #$_ds_instance_setup = "/etc/dirsrv/slapd-${_safe_path}/dse.ldif"
 
     if $title in pick($facts['ds389__instances'], {}).keys {
       exec { "Cleanup Bad Bootstrap for ${title} DS":
@@ -227,6 +223,7 @@ define ds389::instance (
     exec { "Setup ${title} DS":
       command => "${_base_setup_command}${_ldif_import_command} && touch '${_ds_instance_setup}'",
       creates => $_ds_instance_setup,
+      require => File[$_ds_config_file],
       notify  => Ds389::Instance::Service[$title],
     }
 

@@ -83,14 +83,14 @@ define ds389::instance::attr::set (
 ) {
   $_instance_name = split($instance_name, /^(dirsrv@)?slapd-/)[-1]
 
-  if (!$key and !$value) and empty($attrs) and empty($security_attrs) {
-    fail('You must specify either $key and $value or at least one of $attrs or $security_attrs' )
+  if !$key and !$value and empty($attrs) {
+    fail('You must specify either $key and $value or $attrs' )
   }
   if ($key and !$value) or ($value and !$key) {
     fail('You must specify both $key and $value if one is specified')
   }
-  if $key and $value and (!empty($attrs) or !empty($security_attrs)) {
-    fail('You cannot specify $key/$value and $attrs/$security_attrs together')
+  if $key and $value and !empty($attrs) {
+    fail('You cannot specify $key/$value and $attrs together')
   }
 
   $_known_instances = pick($facts['ds389__instances'], {})
@@ -134,15 +134,11 @@ define ds389::instance::attr::set (
   }
   else {
     $_attrs = {
-      $base_dn => {
-        $key => $value,
-      }
+      $key => $value,
     }
   }
 
   $_attrs.each |String $_key, NotUndef $_value| {
-    # $_command = "echo -e \"dn: ${_base_dn}\\nchangetype: modify\\nreplace: ${_key}\\n${_key}: ${_value}\" | ldapmodify ${_ldap_command_base}"
-    # $_unless = "ldapsearch ${_ldap_command_base} -LLL -s base -S '' -a always -o ldif-wrap=no -b '${_base_dn}' '${_key}' | grep -x '${_key}: ${_value}'"
     $_command = "/usr/sbin/dsconf -y ${_root_pw_file} ${_instance_name} config replace ${_key}=${_value}"
     $_unless = "/usr/sbin/dsconf ${_instance_name} config get '${_key}' | grep -x '${_key}: ${_value}'"
 

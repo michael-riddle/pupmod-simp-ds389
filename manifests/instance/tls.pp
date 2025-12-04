@@ -60,7 +60,7 @@ define ds389::instance::tls (
   Stdlib::Absolutepath                      $key           = "/etc/pki/simp_apps/${module_name}_${title}/x509/private/${facts['networking']['fqdn']}.pem",
   Stdlib::Absolutepath                      $cafile        = "/etc/pki/simp_apps/${module_name}_${title}/x509/cacerts/cacerts.pem",
   Ds389::ConfigItem                         $dse_config    = simplib::dlookup('ds389::instance::tls', 'dse_config', { 'default_value' => {} }),
-  String[16]                                $token         = simplib::passgen("ds389_${title}_pki", { 'length' => 32, 'complexity' => 1 }),
+  Optional[String[16]]                      $token         = undef,
   String[1]                                 $service_group = 'dirsrv'
 ) {
   assert_private()
@@ -126,20 +126,19 @@ define ds389::instance::tls (
         #instance => $title,
       }
 
-      # Needed to allow unattended starts
-      # See the 389-DS docs for additional details.
-      $_pin_file = "/etc/dirsrv/slapd-${title}/pin.txt"
-      $_token_file = "/etc/dirsrv/slapd-${title}/p12token.txt"
+      $_instance_base = "/etc/dirsrv/slapd-${title}"
 
-      file { $_pin_file:
-        group   => $service_group,
-        mode    => '0600',
-        content => Sensitive("Internal (Software) Token:${token}\n"),
+      # Need to manage this file for ordering purposes
+      file { $_instance_base:
+        ensure  => directory,
+        require => Exec["Setup ${title} DS"],
       }
 
-      file { $_token_file:
-        mode    => '0400',
-        content => Sensitive($token),
+      ds389_nss_token { "${title}_nss_token":
+        instance_name => $title,
+        instance_dir  => $_instance_base,
+        token         => $token,
+        require       => File[$_instance_base],
       }
 
       if $ensure {
@@ -151,21 +150,21 @@ define ds389::instance::tls (
         }
       }
 
-      $_instance_base = "/etc/dirsrv/slapd-${title}"
       $_p12_file = "${_instance_base}/puppet_import.p12"
+      $_token_file = "${_instance_base}/token.txt"
 
       exec { "Validate ${title} p12":
-        command => "rm -f ${_p12_file}",
-        unless  => "openssl pkcs12 -nokeys -in ${_p12_file} -passin file:${_token_file}",
-        path    => ['/bin', '/usr/bin'],
-        notify  => Exec["Build ${title} p12"],
+        command   => "rm -f ${_p12_file}",
+        unless    => "openssl pkcs12 -nokeys -in ${_p12_file} -passin file:${_token_file}",
+        path      => ['/bin', '/usr/bin'],
+        subscribe => Ds389_nss_token["${title}_nss_token"],
       }
 
       exec { "Build ${title} p12":
         command     => "openssl pkcs12 -export -name 'Server-Cert' -out ${_p12_file} -in ${key} -certfile ${cert} -passout file:${_token_file}",
         refreshonly => true,
         path        => ['/bin', '/usr/bin'],
-        subscribe   => File[$_token_file],
+        subscribe   => Exec["Validate ${title} p12"],
       }
 
       exec { "Import ${title} p12":
@@ -183,18 +182,6 @@ define ds389::instance::tls (
         subscribe => Exec["Build ${title} p12"],
       }
 
-      # ds389::instance::dn::add { "RSA DN for ${title}":
-      #   instance_name => $title,
-      #   dn            => 'cn=RSA,cn=encryption,cn=config',
-      #   objectclass   => [
-      #     'top',
-      #     'nsEncryptionModule',
-      #   ],
-      #   root_dn       => $root_dn,
-      #   root_pw_file  => $root_pw_file,
-      #   force_ldapi   => true,
-      # }
-
       ds389::instance::attr::set { "Configure PKI for ${title}":
         instance_name    => $title,
         root_dn          => $root_dn,
@@ -202,7 +189,6 @@ define ds389::instance::tls (
         attrs            => $_default_dse_config.deep_merge($dse_config).deep_merge($_required_dse_config),
         force_ldapi      => true,
         restart_instance => true,
-        #require          => Ds389::Instance::Dn::Add["RSA DN for ${title}"],
       }
     }
   }
