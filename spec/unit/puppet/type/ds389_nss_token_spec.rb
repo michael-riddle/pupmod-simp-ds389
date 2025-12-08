@@ -28,9 +28,9 @@ describe Puppet::Type.type(:ds389_nss_token) do
         described_class.new(
           name: 'bad',
           instance_name: '',
-          instance_dir: '/tmp'
+          instance_dir: '/tmp',
         )
-      }.to raise_error(Puppet::ResourceError, /must not be empty/)
+      }.to raise_error(Puppet::ResourceError, %r{must not be empty})
     end
   end
 
@@ -45,9 +45,9 @@ describe Puppet::Type.type(:ds389_nss_token) do
         described_class.new(
           name: 'bad',
           instance_name: 'x',
-          instance_dir: 'not_absolute'
+          instance_dir: 'not_absolute',
         )
-      }.to raise_error(Puppet::ResourceError, /must be an absolute path/)
+      }.to raise_error(Puppet::ResourceError, %r{must be an absolute path})
     end
   end
 

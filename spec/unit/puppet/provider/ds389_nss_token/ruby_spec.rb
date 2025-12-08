@@ -2,11 +2,8 @@
 
 require 'spec_helper'
 require 'puppet'
-# require 'puppet/type/ds389_nss_token'
-# require_relative '../../../../../lib/puppet/provider/ds389_nss_token/ruby'
 
-provider_class = Puppet::Type.type(:ds389_nss_token).provider(:ruby)
-describe provider_class do
+describe Puppet::Type.type(:ds389_nss_token).provider(:ruby) do
   let(:instance_dir) { '/tmp/slapd-test' }
   let(:token_path) { File.join(instance_dir, 'token.txt') }
   let(:pin_path) { File.join(instance_dir, 'pin.txt') }
@@ -20,7 +17,7 @@ describe provider_class do
     )
   end
 
-  let(:provider) { provider_class.new(resource) }
+  let(:provider) { Puppet::Type.type(:ds389_nss_token).provider(:ruby).new(resource) }
 
   before(:each) do
     FileUtils.mkdir_p(instance_dir)
